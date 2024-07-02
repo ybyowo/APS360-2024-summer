@@ -25,5 +25,5 @@ for images, boxes, labels in data_loader:
             targets.append(target)
 
         #evaluate_predictions(pred, targets)
-        #visualize_image_with_boxes(images[0], pred[0])
+        visualize_image_with_boxes(images[0], pred[0])
 
