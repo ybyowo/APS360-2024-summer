@@ -1,0 +1,13 @@
+train: C:\\Users\\Wang Yanchi\\Desktop\\coding\\textrecgnition\\train\\images
+val: C:\\Users\\Wang Yanchi\\Desktop\\coding\\textrecgnition\\valid\\images
+test: C:\\Users\\Wang Yanchi\\Desktop\\coding\\textrecgnition\\test\\images
+
+nc: 36
+names: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+
+roboflow:
+  workspace: letter-segmentation
+  project: letter-segmentation-zhtwv
+  version: 6
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/letter-segmentation/letter-segmentation-zhtwv/dataset/6
