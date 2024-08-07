@@ -5,81 +5,80 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import torch
 import torchvision
+from mapcalc import calculate_map
 
-
-# Function to resize images to the smallest image size
-def resize_images(folder_path):
-    min_width, min_height = float('inf'), float('inf')
-    for filename in os.listdir(folder_path):
-        if filename.endswith('.png'):
-            image_path = os.path.join(folder_path, filename)
-            img = Image.open(image_path)
-            width, height = img.size
-            if width < min_width:
-                min_width = width
-            if height < min_height:
-                min_height = height
-    # Resize all images to the smallest size found
-    for filename in os.listdir(folder_path):
-        if filename.endswith('.png'):
-            image_path = os.path.join(folder_path, filename)
-            img = Image.open(image_path)
-            img_resized = img.resize((min_width, min_height), Image.ANTIALIAS)
-            # Save or overwrite the resized image
-            img_resized.save(image_path)
 
 def collate_fn(batch):
     images = [item[0] for item in batch]
     boxes = [item[1] for item in batch]
     labels = [item[2] for item in batch]
-    
-    images = torch.stack(images, dim=0)
-    
-    return images, boxes, labels
 
+    # Find the max height and width in the batch
+    max_height = max([img.shape[1] for img in images])
+    max_width = max([img.shape[2] for img in images])
 
-def plot_training_validation_accuracy(train_acc, val_acc):
-    plt.figure(figsize=(10, 5))
-    plt.plot(train_acc, label='Training Accuracy')
-    plt.plot(val_acc, label='Validation Accuracy')
-    plt.xlabel('Epoch')
-    plt.ylabel('Accuracy')
-    plt.legend()
-    plt.show()
+    # Pad images to the same size
+    padded_images = []
+    for img in images:
+        padded_img = torch.nn.functional.pad(img, (0, max_width - img.shape[2], 0, max_height - img.shape[1]), value=0)
+        padded_images.append(padded_img)
 
-def evaluate_model(model, data_loader, device):
+    padded_images = torch.stack(padded_images, dim=0)
+    return padded_images, boxes, labels
+
+def evaluate_model(model, data_loader, device, iou_threshold=0.5, score_threshold=0.8):
     model.eval()
     correct = 0
-    total = 0
+    total_pred_boxes = 0
+    total_true_boxes = 0
+    ground_truth_dict = {"boxes": [], "labels": []}
+    result_dict = {"boxes": [], "scores": [], "labels": []}
 
     with torch.no_grad():
         for images, boxes, labels in data_loader:
-            images = list(image.to(device) for image in images)
+            images = [image.to(device) for image in images]
             targets = []
             for box, label in zip(boxes, labels):
                 target = {}
                 target["boxes"] = box
                 target["labels"] = label
                 targets.append(target)
+                ground_truth_dict["boxes"].extend(box.cpu().numpy())
+                ground_truth_dict["labels"].extend(label.cpu().numpy())
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
             outputs = model(images)
             for i, output in enumerate(outputs):
                 pred_boxes = output['boxes']
+                pred_scores = output['scores']
                 true_boxes = targets[i]['boxes']
-                print(pred_boxes)
-                print(true_boxes)
+
+                # Filter out predictions with low scores
+                high_score_indices = pred_scores > score_threshold
+                pred_boxes = pred_boxes[high_score_indices]
+                pred_scores = pred_scores[high_score_indices]
+                pred_labels = torch.ones_like(pred_scores)
+
+                result_dict["boxes"].extend(pred_boxes.cpu().numpy())
+                result_dict["scores"].extend(pred_scores.cpu().numpy())
+                result_dict["labels"].extend(pred_labels.cpu().numpy())
 
                 if pred_boxes.nelement() == 0 or true_boxes.nelement() == 0:
                     continue
 
                 iou = torchvision.ops.box_iou(pred_boxes, true_boxes)
-                print(f"iou: {iou}")
                 max_iou, _ = iou.max(dim=1)
-                correct += (max_iou > 0.5).sum().item()
-                total += pred_boxes.size(0)
+                correct += (max_iou > iou_threshold).sum().item()
+                total_pred_boxes += pred_boxes.size(0)
+                total_true_boxes += true_boxes.size(0)
 
-    return correct / total if total > 0 else 0
+
+    recall = correct / total_true_boxes if total_true_boxes > 0 else 0
+    precision = correct / total_pred_boxes if total_pred_boxes > 0 else 0
+    average_precision = calculate_map(ground_truth_dict, result_dict, iou_threshold)
+
+
+    return recall, precision, average_precision
 
 
 
