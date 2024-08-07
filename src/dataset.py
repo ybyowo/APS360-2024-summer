@@ -37,7 +37,6 @@ class LicensePlateDataset(Dataset):
         if self.transforms:
             img = self.transforms(img)
 
-        #img, boxes = resize_image(img, boxes)
         img = img[:3, :, :]
         return img, boxes, labels
 
