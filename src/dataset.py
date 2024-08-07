@@ -5,7 +5,6 @@ import os
 import xml.etree.ElementTree as ET
 import torch
 from torch.utils.data import Dataset, DataLoader, Subset
-from utils import resize_images
 
 class LicensePlateDataset(Dataset):
     def __init__(self, root, transforms=None):
