@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 import matplotlib
 import matplotlib.pyplot as plt
 from dataset import LicensePlateDataset
-from utils import collate_fn, evaluate_model, plot_training_validation_accuracy
+from utils import collate_fn, evaluate_model
 
 
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -30,12 +30,17 @@ indices = list(range(dataset_size))
 train_indices, val_test_indices = train_test_split(indices, test_size=0.2, random_state=42)
 val_indices, test_indices = train_test_split(val_test_indices, test_size=0.5, random_state=42)
 
+# Create datasets
 train_dataset = Subset(dataset, train_indices)
 val_dataset = Subset(dataset, val_indices)
 test_dataset = Subset(dataset, test_indices)
 
-train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=collate_fn)
-val_loader = DataLoader(val_dataset, batch_size=1, shuffle=True, collate_fn=collate_fn)
+# Create data loaders
+train_loader_single = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=collate_fn)
+val_loader_single = DataLoader(val_dataset, batch_size=1, shuffle=True, collate_fn=collate_fn)
+batch_size = 16
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
 test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True, collate_fn=collate_fn)
 
 # Load the model
@@ -53,12 +58,15 @@ params = [p for p in model.parameters() if p.requires_grad]
 optimizer = torch.optim.SGD(params, lr=0.001, momentum=0.9, weight_decay=0.00005)
 
 # Training loop
-batch_size = 1
-lr = 0.001
-num_epochs = 10
+lr = 0.0001
+num_epochs = 40
 i = 0
-train_accuracies = []
-val_accuracies = []
+train_precisions = []
+train_recalls = []
+val_precisions = []
+val_recalls = []
+train_aps = []
+val_aps = []
 classification_losses = []
 regression_losses = []
 for epoch in range(num_epochs):
@@ -75,11 +83,11 @@ for epoch in range(num_epochs):
         loss_dict = model(images, targets)
         losses = sum(loss for loss in loss_dict.values())
 
-        
+
         losses.backward()
         optimizer.step()
         optimizer.zero_grad()
- 
+
         # Access individual losses
         classification_loss = loss_dict['loss_classifier']
         regression_loss = loss_dict['loss_box_reg']
@@ -88,19 +96,23 @@ for epoch in range(num_epochs):
         classification_losses.append(float(classification_loss)/batch_size)
         regression_losses.append(float(regression_loss)/batch_size)
 
-        print(f"Iteration {i}")
-        
+        print(f"Epoch: {epoch} Iteration: {i}")
+
 
         i += 1
 
-    train_accuracy = evaluate_model(model, train_loader, device)
-    val_accuracy = evaluate_model(model, val_loader, device)
+        #lr_scheduler.step()
+    train_recall, train_precision, train_ap = evaluate_model(model, train_loader_single, device)
+    val_recall, val_precision, val_ap = evaluate_model(model, val_loader_single, device)
 
-    train_accuracies.append(train_accuracy)
-    val_accuracies.append(val_accuracy)
-
-# Save the model
-torch.save(model.state_dict(), f"FastRCNN_set_kagglelarxel_epochs_{num_epochs}_learning_rate_{lr}_batch_size_{batch_size}.pth")
+    train_recalls.append(train_recall)
+    train_precisions.append(train_precision)
+    val_recalls.append(val_recall)
+    val_precisions.append(val_precision)
+    train_aps.append(train_ap)
+    val_aps.append(val_ap)
+    # Save model checkpoint
+    torch.save(model.state_dict(), f"FastRCNN_learning_rate_{lr}_batch_size_{batch_size}_epoch_{epoch}.pth")
 
 
 # Plot the classification and regression losses
@@ -123,12 +135,32 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
-train_accuracy = evaluate_model(model, train_loader, device)
-val_accuracy = evaluate_model(model, val_loader, device)
+plt.figure(figsize=(10, 5))
+plt.plot(train_recalls, label='Training Recall')
+plt.plot(val_recalls, label='Validation Recall')
+plt.xlabel('Epoch')
+plt.ylabel('Recall')
+plt.title('Recall Over Epochs')
+plt.legend()
+plt.show()
 
-train_accuracies.append(train_accuracy)
-val_accuracies.append(val_accuracy)
-plot_training_validation_accuracy(train_accuracies, val_accuracies)
+plt.figure(figsize=(10, 5))
+plt.plot(train_precisions, label='Training Precision')
+plt.plot(val_precisions, label='Validation Precision')
+plt.xlabel('Epoch')
+plt.ylabel('Precision')
+plt.title('Precision Over Epochs')
+plt.legend()
+plt.show()
+
+plt.figure(figsize=(10, 5))
+plt.plot(train_aps, label='Training AP')
+plt.plot(val_aps, label='Validation AP')
+plt.xlabel('Epoch')
+plt.ylabel('Average Precision')
+plt.title('Average Precision Over Epochs')
+plt.legend()
+plt.show()
 
 print("Training complete!")
 
