@@ -1,10 +1,31 @@
-# Load the best model
+import torch, torchvision
+from utils import visualize_images_with_boxes, evaluate_model
+from dataset import LicensePlateDataset
+from torch.utils.data import DataLoader, ConcatDataset
+
+# Load the model
+model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
+
+# Replace the box_predictor with a new one
+num_classes = 2  # 1 class (license plate) + background
+in_features = model.roi_heads.box_predictor.cls_score.in_features
+model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+
+# Load the best model weights from training
 model.load_state_dict(torch.load('best_model', map_location=device))
 
+# Move model to the appropriate device
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+model.to(device)
+
 # Load the saved datasets and create loaders
-train_set = torch.load('train_set')
-val_set = torch.load('val_set')
-test_set = torch.load('test_set')
+train_set = torch.load('train_dataset')
+val_set = torch.load('val_dataset')
+test_set = torch.load('test_dataset')
+
+train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=collate_fn)
+val_loader = DataLoader(val_dataset, batch_size=1, shuffle=True, collate_fn=collate_fn)
+test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True, collate_fn=collate_fn)
 
 # Create a dataset and loader for self-taken images and combine with the test set
 new_dataset = LicensePlateDataset('lp_loc',  transforms=transform)
