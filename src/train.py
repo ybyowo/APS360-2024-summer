@@ -120,7 +120,7 @@ for epoch in range(num_epochs):
     train_aps.append(train_ap)
     val_aps.append(val_ap)
     # Save model checkpoint
-    torch.save(model.state_dict(), f"FastRCNN_learning_rate_{learning_rate}_batch_size_{batch_size}_epoch_{epoch}.pth")
+    torch.save(model.state_dict(), f"FastRCNN_learning_rate_{learning_rate}_batch_size_{batch_size}_epoch_{epoch}")
 
 # Plot the classification and regression losses
 plt.figure(figsize=(10, 5))
@@ -170,3 +170,10 @@ plt.legend()
 plt.show()
 
 print("Training complete")
+
+# Choose the best model checkpoint based on highest average precision (AP)
+max_index = val_aps.index(max(val_aps))
+print(f"Best model at epoch {max_index}")
+best_model_path = f"FastRCNN_learning_rate_{lr}_batch_size_{batch_size}_epoch_{max_index}"
+model.load_state_dict(torch.load(best_model_path, map_location=device))
+torch.save(model.state_dict(), 'best_model')
