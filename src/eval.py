@@ -1,8 +1,10 @@
-# Choose the best model checkpoint based on highest average precision (AP)
-max_index = val_aps.index(max(val_aps))
-print(f"Best model at epoch {max_index}")
-best_model_path = f"FastRCNN_learning_rate_{lr}_batch_size_{batch_size}_epoch_{max_index}.pth"
-model.load_state_dict(torch.load(best_model_path, map_location=device))
+# Load the best model
+model.load_state_dict(torch.load('best_model', map_location=device))
+
+# Load the saved datasets and create loaders
+train_set = torch.load('train_set')
+val_set = torch.load('val_set')
+test_set = torch.load('test_set')
 
 # Create a dataset and loader for self-taken images and combine with the test set
 new_dataset = LicensePlateDataset('lp_loc',  transforms=transform)
