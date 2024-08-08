@@ -11,12 +11,12 @@ num_classes = 2  # 1 class (license plate) + background
 in_features = model.roi_heads.box_predictor.cls_score.in_features
 model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
 
-# Load the best model weights from training
-model.load_state_dict(torch.load('best_model', map_location=device))
-
 # Move model to the appropriate device
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model.to(device)
+
+# Load the best model weights from training
+model.load_state_dict(torch.load('best_model', map_location=device))
 
 # Load the saved datasets and create loaders
 train_set = torch.load('train_dataset')
