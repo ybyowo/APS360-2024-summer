@@ -15,6 +15,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from dataset import LicensePlateDataset
 from utils import collate_fn, evaluate_model, visualize_image_with_boxes
+import argparse
 
 # Create the parser
 parser = argparse.ArgumentParser()
@@ -31,7 +32,7 @@ args = parser.parse_args()
 ssl._create_default_https_context = ssl._create_unverified_context
 
 transform = T.Compose([T.ToTensor()])
-dataset = LicensePlateDataset(dataset_path,  transforms=transform)
+dataset = LicensePlateDataset(args.dataset_path,  transforms=transform)
 
 # Get dataset indices
 dataset_size = len(dataset)
@@ -52,8 +53,8 @@ torch.save(val_dataset, 'val_dataset')
 torch.save(test_dataset, 'test_dataset')
 
 # Create data loaders
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
+val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
 test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True, collate_fn=collate_fn)
 
 train_loader_single = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=collate_fn)
@@ -70,7 +71,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model.to(device)
 
 # Construct an optimizer
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
 
 # Training loop
 i = 0
@@ -82,7 +83,7 @@ train_aps = []
 val_aps = []
 classification_losses = []
 regression_losses = []
-for epoch in range(num_epochs):
+for epoch in range(args.num_epochs):
     for images, boxes, labels in train_loader:
         model.train()
         targets = []
@@ -120,7 +121,7 @@ for epoch in range(num_epochs):
     train_aps.append(train_ap)
     val_aps.append(val_ap)
     # Save model checkpoint
-    torch.save(model.state_dict(), f"FastRCNN_learning_rate_{learning_rate}_batch_size_{batch_size}_epoch_{epoch}")
+    torch.save(model.state_dict(), f"FastRCNN_learning_rate_{args.learning_rate}_batch_size_{args.batch_size}_epoch_{epoch}")
 
 # Plot the classification and regression losses
 plt.figure(figsize=(10, 5))
@@ -174,6 +175,6 @@ print("Training complete")
 # Choose the best model checkpoint based on highest average precision (AP)
 max_index = val_aps.index(max(val_aps))
 print(f"Best model at epoch {max_index}")
-best_model_path = f"FastRCNN_learning_rate_{lr}_batch_size_{batch_size}_epoch_{max_index}"
+best_model_path = f"FastRCNN_learning_rate_{args.learning_rate}_batch_size_{args.batch_size}_epoch_{max_index}"
 model.load_state_dict(torch.load(best_model_path, map_location=device))
 torch.save(model.state_dict(), 'best_model')
