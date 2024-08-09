@@ -40,10 +40,10 @@ def perform_localization(data_loader, model_path, num_classes, save_csv_path, de
 def perform_segmentation_from_csv(localization_csv_path, images_folder, segmentation_model_path, save_csv_path, device):
     yolo_manager = YOLOManager(segmentation_model_path, device)
     df_localization = pd.read_csv(localization_csv_path)
-
+    
     segmentation_results = []
     transform = Compose([Resize((640, 640)), ToTensor()])
-
+    
     for index, row in df_localization.iterrows():
         img_filename = row['Image Filename'].strip("('").rstrip("',)")
         box = eval(row['Boxes'])
@@ -53,11 +53,11 @@ def perform_segmentation_from_csv(localization_csv_path, images_folder, segmenta
         img_cropped = img.crop((box[0], box[1], box[2], box[3]))
         img_transformed = img_transformed = transform(img_cropped).unsqueeze(0).to(device)
         results = yolo_manager.predict(img_transformed)
-        for bbox in results.boxes:
-            x1, y1, x2, y2 = bbox.xyxy[0].tolist()
-            # x1, y1, x2, y2, conf, cls_id = bbox
-            segmentation_results.append([img_filename, x1, y1, x2, y2])
-
+        for result in results:
+            for bbox in result.boxes:
+                x1, y1, x2, y2 = bbox.xyxy[0].tolist()
+                # x1, y1, x2, y2, conf, cls_id = bbox
+                segmentation_results.append([img_filename, x1, y1, x2, y2])
 
     df_segmentation = pd.DataFrame(segmentation_results, columns=['Image Filename', 'x1', 'y1', 'x2', 'y2'])
     df_segmentation.to_csv(save_csv_path, index=False)
@@ -105,10 +105,11 @@ def main():
     segmentation_csv_path = 'segmentation.csv'
     
     num_classes = 37  # Including background as one class
-    dataset_path = 'Plate and Character Detection.v2i.voc/test'
+    dataset_path = 'C:\\Users\\Wang Yanchi\\Desktop\\uoft\\3\\aps360\\ALPR\\ALPR_repo\\APS360-2024-summer2\\APS360-2024-summer\\test'
     images_folder = dataset_path  # Assuming images are in the same folder as the dataset
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
+    
+    
     output_folder = 'annotated_images'
 
     # Initialize dataset and DataLoader
@@ -118,10 +119,11 @@ def main():
 
     # Perform localization
     perform_localization(data_loader, localization_weight, 2, localization_csv_path, device)
-
+    visualize_predictions_from_csv(localization_csv_path, images_folder, 'temp')
     # Perform segmentation from CSV
     perform_segmentation_from_csv(localization_csv_path, images_folder, segmentation_weight, segmentation_csv_path, device)
-
+    # visualize_predictions_from_csv(segmentation_csv_path, images_folder, 'temp2')
 
 if __name__ == "__main__":
     main()
+    

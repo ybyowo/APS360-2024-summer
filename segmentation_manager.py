@@ -39,8 +39,8 @@ class YOLOManager:
             List[dict]: A list of dictionaries containing predictions.
         """
         results = self.model.predict(source=images, iou=iou_thres, conf=conf_thres, show_conf=False, show_labels=False)
-        print(results[0])
-        return results[0]
+        
+        return results
 
     def save_model(self, save_path):
         """
