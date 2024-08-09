@@ -2,10 +2,13 @@ import os
 import torch
 from torchvision.transforms import ToTensor
 import pandas as pd
+from torchvision.transforms import Compose, Resize, ToTensor
 from dataset_manager import LicensePlateDataset
 from localization_manager import FasterRCNNManager
 from util import draw_box_on_image
-
+from ultralytics import YOLO
+from PIL import Image
+from segmentation_manager import YOLOManager
 
 def perform_localization(data_loader, model_path, num_classes, save_csv_path, device):
     # Initialize model
@@ -33,6 +36,32 @@ def perform_localization(data_loader, model_path, num_classes, save_csv_path, de
     # Save to CSV
     df.to_csv(save_csv_path, index=False)
     print(f"Predictions saved to {save_csv_path}")
+    
+def perform_segmentation_from_csv(localization_csv_path, images_folder, segmentation_model_path, save_csv_path, device):
+    yolo_manager = YOLOManager(segmentation_model_path, device)
+    df_localization = pd.read_csv(localization_csv_path)
+
+    segmentation_results = []
+    for index, row in df_localization.iterrows():
+        img_filename = row['Image Filename'].strip("('").rstrip("',)")
+        box = eval(row['Boxes'])
+
+        img_path = os.path.join(images_folder, img_filename)
+        img = Image.open(img_path).convert('RGB')
+        img_cropped = img.crop((box[0], box[1], box[2], box[3]))
+        img_transformed = ToTensor()(img_cropped).unsqueeze(0).to(device)
+        results = yolo_manager.predict(img_transformed)
+        for bbox in results.boxes:
+            x1, y1, x2, y2 = bbox.xyxy[0].tolist()
+            # x1, y1, x2, y2, conf, cls_id = bbox
+            segmentation_results.append([img_filename, x1, y1, x2, y2])
+
+
+    df_segmentation = pd.DataFrame(segmentation_results, columns=['Image Filename', 'x1', 'y1', 'x2', 'y2'])
+    df_segmentation.to_csv(save_csv_path, index=False)
+    print(f"Segmentation results saved to {save_csv_path}")
+
+
 
 def visualize_predictions_from_csv(csv_path, images_folder, output_folder):
     """
@@ -68,12 +97,16 @@ def visualize_predictions_from_csv(csv_path, images_folder, output_folder):
     
 def main():
     # Configurations
-    dataset_path = 'Plate and Character Detection.v2i.voc/test'
-    localization_model = 'FastRCNN_learning_rate_0.001_batch_size_16_epoch_18.pth'
-    num_classes = 37  # Including background as one class
-    save_csv_path = 'localization.csv'
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    localization_weight = 'FastRCNN_learning_rate_0.001_batch_size_16_epoch_18.pth'
+    localization_csv_path = 'localization.csv'
+    segmentation_weight = "yolo_segmentation.pt"  
+    segmentation_csv_path = 'segmentation.csv'
     
+    num_classes = 37  # Including background as one class
+    dataset_path = 'Plate and Character Detection.v2i.voc/test'
+    images_folder = dataset_path  # Assuming images are in the same folder as the dataset
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
     output_folder = 'annotated_images'
 
     # Initialize dataset and DataLoader
@@ -82,9 +115,11 @@ def main():
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
 
     # Perform localization
-    perform_localization(data_loader, localization_model, 2, save_csv_path, device)
+    perform_localization(data_loader, localization_weight, 2, localization_csv_path, device)
 
-    visualize_predictions_from_csv(save_csv_path, dataset_path, output_folder)
+    # Perform segmentation from CSV
+    perform_segmentation_from_csv(localization_csv_path, images_folder, segmentation_weight, segmentation_csv_path, device)
+
 
 if __name__ == "__main__":
     main()
