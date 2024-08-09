@@ -42,6 +42,8 @@ def perform_segmentation_from_csv(localization_csv_path, images_folder, segmenta
     df_localization = pd.read_csv(localization_csv_path)
 
     segmentation_results = []
+    transform = Compose([Resize((640, 640)), ToTensor()])
+
     for index, row in df_localization.iterrows():
         img_filename = row['Image Filename'].strip("('").rstrip("',)")
         box = eval(row['Boxes'])
@@ -49,7 +51,7 @@ def perform_segmentation_from_csv(localization_csv_path, images_folder, segmenta
         img_path = os.path.join(images_folder, img_filename)
         img = Image.open(img_path).convert('RGB')
         img_cropped = img.crop((box[0], box[1], box[2], box[3]))
-        img_transformed = ToTensor()(img_cropped).unsqueeze(0).to(device)
+        img_transformed = img_transformed = transform(img_cropped).unsqueeze(0).to(device)
         results = yolo_manager.predict(img_transformed)
         for bbox in results.boxes:
             x1, y1, x2, y2 = bbox.xyxy[0].tolist()
