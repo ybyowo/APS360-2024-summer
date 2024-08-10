@@ -38,37 +38,58 @@ def perform_localization(data_loader, model_path, num_classes, save_csv_path, de
     print(f"Predictions saved to {save_csv_path}")
     
 def perform_segmentation_from_csv(localization_csv_path, images_folder, segmentation_model_path, save_csv_path, device):
+    # Initialize the YOLO model manager with the specified model and device
     yolo_manager = YOLOManager(segmentation_model_path, device)
+    # Read the localization data from the CSV file
     df_localization = pd.read_csv(localization_csv_path)
     
+    # List to store segmentation results
     segmentation_results = []
-    transform = Compose([Resize((640, 640)), ToTensor()])
-    
+    # Set the target resize dimensions
+    target_size = 640  # Fixed size to which images are resized for model input
+    # Define the transformation to resize images and convert them to tensors
+    transform = Compose([Resize((target_size, target_size)), ToTensor()])
+
+    # Iterate over each entry in the localization CSV
     for index, row in df_localization.iterrows():
         img_filename = row['Image Filename'].strip("('").rstrip("',)")
         box = eval(row['Boxes'])
 
+        # Construct the full path to the image
         img_path = os.path.join(images_folder, img_filename)
         img = Image.open(img_path).convert('RGB')
-        img_cropped = img.crop((box[0], box[1], box[2], box[3]))
-        img_transformed = img_transformed = transform(img_cropped).unsqueeze(0).to(device)
-        results = yolo_manager.predict(img_transformed)
-        for result in results:
-            # Sort the tensor based on the first element in each row (x-coordinate of top-left corner)
-            sorted_xyxy, _ = torch.sort(result.boxes.xyxy, dim=0, stable=True)
+        original_width, original_height = img.size  # Original image dimensions
 
-            # Sort the entire rows based on the first element in each row
-            sorted_xyxy = result.boxes.xyxy[result.boxes.xyxy[:, 0].argsort()]
-            for bbox in sorted_xyxy:
-                x1, y1, x2, y2 = bbox.tolist()
-                # x1, y1, x2, y2, conf, cls_id = bbox
+        # Crop the image according to the provided box coordinates
+        img_cropped = img.crop((box[0], box[1], box[2], box[3]))
+        cropped_width, cropped_height = img_cropped.size  # Dimensions of the cropped image
+
+        # Transform the cropped image and prepare it for model prediction
+        img_transformed = transform(img_cropped).unsqueeze(0).to(device)
+        # Predict using the YOLO model
+        results = yolo_manager.predict(img_transformed)
+        
+        # Process each result detected by the model
+        for result in results:
+            for bbox in result.boxes:
+                # Scale the detected box coordinates back to the dimensions of the cropped image
+                x1, y1, x2, y2 = bbox.xyxy[0].tolist()
+                x1 = x1 * cropped_width / target_size + box[0]
+                y1 = y1 * cropped_height / target_size + box[1]
+                x2 = x2 * cropped_width / target_size + box[0]
+                y2 = y2 * cropped_height / target_size + box[1]
+
+                # Append the results with coordinates mapped back to the original image
                 segmentation_results.append([img_filename, x1, y1, x2, y2])
 
-    df_segmentation = pd.DataFrame(segmentation_results, columns=['Image Filename', 'x1', 'y1', 'x2', 'y2'])
-    df_segmentation.to_csv(save_csv_path, index=False)
-    print(f"Segmentation results saved to {save_csv_path}")
-
-
+    # Create a DataFrame from the segmentation results
+    if segmentation_results:
+        df_segmentation = pd.DataFrame(segmentation_results, columns=['Image Filename', 'x1', 'y1', 'x2', 'y2'])
+        # Save the DataFrame to a CSV file
+        df_segmentation.to_csv(save_csv_path, index=False)
+        print(f"Segmentation results saved to {save_csv_path} with {len(df_segmentation)} records.")
+    else:
+        print("No segmentation results to save.")
 
 def visualize_predictions_from_csv(csv_path, images_folder, output_folder):
     """
@@ -110,7 +131,7 @@ def main():
     segmentation_csv_path = 'segmentation.csv'
     
     num_classes = 37  # Including background as one class
-    dataset_path = 'C:\\Users\\Wang Yanchi\\Desktop\\uoft\\3\\aps360\\ALPR\\ALPR_repo\\APS360-2024-summer2\\APS360-2024-summer\\test'
+    dataset_path = 'Plate and Character Detection.v4i.voc/test'
     images_folder = dataset_path  # Assuming images are in the same folder as the dataset
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
@@ -124,7 +145,7 @@ def main():
 
     # Perform localization
     perform_localization(data_loader, localization_weight, 2, localization_csv_path, device)
-    visualize_predictions_from_csv(localization_csv_path, images_folder, 'temp')
+    visualize_predictions_from_csv(localization_csv_path, images_folder, output_folder)
     # Perform segmentation from CSV
     perform_segmentation_from_csv(localization_csv_path, images_folder, segmentation_weight, segmentation_csv_path, device)
     # visualize_predictions_from_csv(segmentation_csv_path, images_folder, 'temp2')
