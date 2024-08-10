@@ -1,11 +1,11 @@
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from PIL import Image
 import numpy as np
+from PIL import Image, ImageDraw
 
 def draw_box_on_image(image_path, box, save_path=None):
     """
-    Draws a bounding box on an image and either displays it or saves it to a file.
+    Draws a bounding box on an image and either saves it to a file or displays it using a high-quality method.
     
     Args:
         image_path (str): Path to the original image.
@@ -14,25 +14,14 @@ def draw_box_on_image(image_path, box, save_path=None):
     """
     # Open the image file
     img = Image.open(image_path)
-    # Convert the image into a matplotlib format
-    img = np.array(img, dtype=np.uint8)
+    draw = ImageDraw.Draw(img)
     
-    # Create a matplotlib figure and axis
-    fig, ax = plt.subplots(1)
-    ax.imshow(img)
-    
-    # Calculate the width and height of the box
-    width = box[2] - box[0]
-    height = box[3] - box[1]
-    
-    # Create a rectangle patch
-    rect = patches.Rectangle((box[0], box[1]), width, height, linewidth=2, edgecolor='r', facecolor='none')
-    
-    # Add the patch to the Axes
-    ax.add_patch(rect)
-    
+    # Draw the rectangle on the image
+    draw.rectangle(box, outline='red', width=2)  # Adjust 'width' and 'outline' color as needed
+
     if save_path:
-        plt.savefig(save_path)  # Save the modified image to file
-        plt.close(fig)  # Close the figure to free up memory
+        # Save the modified image to file, specifying high quality
+        img.save(save_path, 'JPEG', quality=99)
     else:
-        plt.show()  # Display the image with the box
+        # Show the image if no save path is provided
+        img.show()
