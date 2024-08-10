@@ -54,8 +54,13 @@ def perform_segmentation_from_csv(localization_csv_path, images_folder, segmenta
         img_transformed = img_transformed = transform(img_cropped).unsqueeze(0).to(device)
         results = yolo_manager.predict(img_transformed)
         for result in results:
-            for bbox in result.boxes:
-                x1, y1, x2, y2 = bbox.xyxy[0].tolist()
+            # Sort the tensor based on the first element in each row (x-coordinate of top-left corner)
+            sorted_xyxy, _ = torch.sort(result.boxes.xyxy, dim=0, stable=True)
+
+            # Sort the entire rows based on the first element in each row
+            sorted_xyxy = result.boxes.xyxy[result.boxes.xyxy[:, 0].argsort()]
+            for bbox in sorted_xyxy:
+                x1, y1, x2, y2 = bbox.tolist()
                 # x1, y1, x2, y2, conf, cls_id = bbox
                 segmentation_results.append([img_filename, x1, y1, x2, y2])
 
