@@ -26,7 +26,7 @@ class YOLOManager:
         torch.cuda.set_device(0)
         return model
 
-    def predict(self, images, size=640, conf_thres=0.5, iou_thres=0.3):
+    def predict(self, images, size=640, conf_thres=0.5, iou_thres=0.5):
         """
         Make predictions on a list of images.
         Args:
