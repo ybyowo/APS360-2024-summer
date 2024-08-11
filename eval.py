@@ -33,25 +33,38 @@ class LicensePlateEvaluator:
         tp_seg, fp_seg, fn_seg = 0, 0, 0
         tp_class, fp_class, fn_class = 0, 0, 0
 
-        for images, gt_boxes, gt_labels, img_filenames in self.data_loader:
-            for img, gt_box, gt_label, img_filename in zip(images, gt_boxes, gt_labels, img_filenames):
-                # Evaluate localization
+        for images, boxes, labels, img_filenames in self.data_loader:
+            for img, box, label, img_filename in zip(images, boxes, labels, img_filenames):
+                # Separate bounding boxes and labels for plates and characters
+                plate_boxes = []
+                char_boxes = []
+                char_labels = []
+
+                # Process each bounding box and label, categorizing them
+                for b, l in zip(box, label):
+                    if l == 0:  # Label 0 is for plates
+                        plate_boxes.append(b)
+                    else:  # Other labels are for characters
+                        char_boxes.append(b)
+                        char_labels.append(l - 1)  # Ensure character labels start from 0
+
+                # Evaluate plate localization
                 pred_boxes_plate = self.localization_data[self.localization_data['Image Filename'] == img_filename]['Boxes'].tolist()
-                matched_plate = self.match_boxes(gt_box, pred_boxes_plate)
+                matched_plate = self.match_boxes(plate_boxes, pred_boxes_plate)
                 tp_plate += matched_plate['tp']
                 fp_plate += matched_plate['fp']
                 fn_plate += matched_plate['fn']
 
-                # Evaluate segmentation
+                # Evaluate character segmentation
                 pred_boxes_char = self.character_data[self.character_data['Image Filename'] == img_filename]['Boxes'].tolist()
-                matched_seg = self.match_boxes(gt_box, pred_boxes_char)
-                tp_seg += matched_seg['tp']
-                fp_seg += matched_seg['fp']
-                fn_seg += matched_seg['fn']
+                matched_char = self.match_boxes(char_boxes, pred_boxes_char)
+                tp_seg += matched_char['tp']
+                fp_seg += matched_char['fp']
+                fn_seg += matched_char['fn']
 
-                # Evaluate classification
-                pred_labels_char = self.character_data[self.character_data['Image Filename'] == img_filename]['Predicted Class'].tolist()
-                matched_class = self.match_classification(gt_box, gt_label, pred_boxes_char, pred_labels_char)
+                # Evaluate character classification
+                pred_labels_char = self.character_data[self.character_data['Image Filename'] == img_filename]['Predicted Class']
+                matched_class = self.match_classification(char_boxes, char_labels, pred_boxes_char, pred_labels_char)
                 tp_class += matched_class['tp']
                 fp_class += matched_class['fp']
                 fn_class += matched_class['fn']

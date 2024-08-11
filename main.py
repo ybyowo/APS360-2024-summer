@@ -197,7 +197,7 @@ def main():
     classifier_weight = 'resnet_classifier.pth'
     classifier_csv_path = 'classification.csv'
     
-    num_classes = 37  # Including background as one class
+    num_classes = 36  # Including background as one class
     dataset_path = 'Plate and Character Detection.v4i.voc/test'
     images_folder = dataset_path  # Assuming images are in the same folder as the dataset
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -216,12 +216,11 @@ def main():
     perform_segmentation_from_csv(localization_csv_path, images_folder, segmentation_weight, segmentation_csv_path, device)
     # visualize_predictions_from_csv(segmentation_csv_path, images_folder, 'temp2')
     
-    classify_characters_from_csv(segmentation_csv_path, images_folder, classifier_weight, classifier_csv_path, device, num_classes-2)
+    classify_characters_from_csv(segmentation_csv_path, images_folder, classifier_weight, classifier_csv_path, device, num_classes-1)
     visualize_predictions_from_csv(localization_csv_path, classifier_csv_path, images_folder, output_folder)
     
     evaluator = LicensePlateEvaluator(localization_csv_path, classifier_csv_path, data_loader)
     results = evaluator.evaluate_predictions()
-    print(results)
     
 if __name__ == "__main__":
     main()
