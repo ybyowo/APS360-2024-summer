@@ -1,14 +1,17 @@
 import os
 import torch
+import torch.nn as nn
 from torchvision.transforms import ToTensor
 import pandas as pd
-from torchvision.transforms import Compose, Resize, ToTensor
+from torchvision.transforms import Compose, Resize, ToTensor, Normalize
+from torchvision import models, transforms
 from dataset_manager import LicensePlateDataset
 from localization_manager import FasterRCNNManager
-from util import draw_box_on_image
+from util import draw_boxes_and_annotations
 from ultralytics import YOLO
 from PIL import Image
 from segmentation_manager import YOLOManager
+from eval import LicensePlateEvaluator
 
 def perform_localization(data_loader, model_path, num_classes, save_csv_path, device):
     # Initialize model
@@ -90,35 +93,97 @@ def perform_segmentation_from_csv(localization_csv_path, images_folder, segmenta
         print(f"Segmentation results saved to {save_csv_path} with {len(df_segmentation)} records.")
     else:
         print("No segmentation results to save.")
+        
+def classify_characters_from_csv(csv_path, images_folder, model_path, save_results_path, device, num_classes=36):
+    # Create an instance of the model architecture
+    model = models.resnet101(weights=None)  # Initialize model without pretrained weights
+    
+    # Replace the fully connected layer to match the number of classes
+    model.fc = nn.Linear(model.fc.in_features, num_classes)
+    
+    # Load the model state dictionary
+    state_dict = torch.load(model_path, map_location=device)
+    model.load_state_dict(state_dict)
 
-def visualize_predictions_from_csv(csv_path, images_folder, output_folder):
+    # Move model to the specified device
+    model = model.to(device)
+    model.eval()  # Set model to evaluation mode
+
+    # Define image transformations
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    # Read the CSV file containing segmentation data
+    df = pd.read_csv(csv_path)
+    classification_results = []
+
+    # Process each row in the CSV
+    for index, row in df.iterrows():
+        img_filename = row['Image Filename']
+        x1, y1, x2, y2 = map(float, [row['x1'], row['y1'], row['x2'], row['y2']])
+
+        # Load and crop the image
+        img_path = os.path.join(images_folder, img_filename)
+        img = Image.open(img_path).convert('RGB')
+        img_cropped = img.crop((x1, y1, x2, y2))
+
+        # Transform the image for the model
+        img_transformed = transform(img_cropped).unsqueeze(0).to(device)
+
+        # Perform the prediction
+        with torch.no_grad():
+            outputs = model(img_transformed)
+            _, predicted = outputs.max(1)
+            predicted_class = predicted.item()
+
+        # Append the result
+        classification_results.append({
+            'Image Filename': img_filename,
+            'x1': x1,
+            'y1': y1,
+            'x2': x2,
+            'y2': y2,
+            'Predicted Class': predicted_class
+        })
+
+    # Save the classification results to a new CSV
+    df_results = pd.DataFrame(classification_results)
+    df_results.to_csv(save_results_path, index=False)
+    print(f"Classification results saved to {save_results_path}")
+    
+def visualize_predictions_from_csv(localization_csv, classification_csv, images_folder, output_folder):
     """
-    Reads predictions from a CSV file and draws bounding boxes on the corresponding images.
+    Processes and visualizes predictions from localization and classification CSV files.
     
     Args:
-        csv_path (str): Path to the CSV file containing predictions.
-        images_folder (str): Path to the folder containing the images.
-        output_folder (str): Path to the folder where annotated images will be saved.
+        localization_csv (str): CSV file path containing localization predictions.
+        classification_csv (str): CSV file path containing classification predictions.
+        images_folder (str): Folder containing the images.
+        output_folder (str): Folder to save the annotated images.
     """
-    
     if not os.path.exists(output_folder):
-        os.makedirs(output_folder)  # Use os.makedirs to create the directory if it does not exist
+        os.makedirs(output_folder)  # Create the directory if it does not exist
 
-    # Read the CSV file into a DataFrame
-    df = pd.read_csv(csv_path)
+    # Read the CSV files
+    localization_df = pd.read_csv(localization_csv)
+    classification_df = pd.read_csv(classification_csv)
     
-    # Iterate over the rows of the DataFrame
-    for index, row in df.iterrows():
-        # Parse image filename, removing extra characters from tuple-string format
-        image_filename = eval(row['Image Filename'])[0]  # Safe because we know the content structure
-        box = eval(row['Boxes'])  # Ensure that the box coordinates are in list format
+    # Parse localization filenames
+    localization_df['Image Filename'] = localization_df['Image Filename'].apply(lambda x: eval(x)[0])
+
+    # Group by image filenames
+    for filename in localization_df['Image Filename'].unique():
+        loc_data = localization_df[localization_df['Image Filename'] == filename].to_dict('records')
+        class_data = classification_df[classification_df['Image Filename'] == filename].to_dict('records')
         
-        # Define the path to the input image and the output image
-        input_image_path = os.path.join(images_folder, image_filename)
-        output_image_path = os.path.join(output_folder, f"annotated_{image_filename}")
-        
-        # Draw and save the image with the box
-        draw_box_on_image(input_image_path, box, output_image_path)
+        input_image_path = os.path.join(images_folder, filename)
+        output_image_path = os.path.join(output_folder, f"annotated_{filename}")
+
+        # Draw and save the image with annotations
+        draw_boxes_and_annotations(input_image_path, loc_data, class_data, output_image_path)
 
     print(f"All images have been processed and saved in {output_folder}")
     
@@ -129,6 +194,8 @@ def main():
     localization_csv_path = 'localization.csv'
     segmentation_weight = "yolo_segmentation.pt"  
     segmentation_csv_path = 'segmentation.csv'
+    classifier_weight = 'resnet_classifier.pth'
+    classifier_csv_path = 'classification.csv'
     
     num_classes = 37  # Including background as one class
     dataset_path = 'Plate and Character Detection.v4i.voc/test'
@@ -145,11 +212,17 @@ def main():
 
     # Perform localization
     perform_localization(data_loader, localization_weight, 2, localization_csv_path, device)
-    visualize_predictions_from_csv(localization_csv_path, images_folder, output_folder)
     # Perform segmentation from CSV
     perform_segmentation_from_csv(localization_csv_path, images_folder, segmentation_weight, segmentation_csv_path, device)
     # visualize_predictions_from_csv(segmentation_csv_path, images_folder, 'temp2')
-
+    
+    classify_characters_from_csv(segmentation_csv_path, images_folder, classifier_weight, classifier_csv_path, device, num_classes-2)
+    visualize_predictions_from_csv(localization_csv_path, classifier_csv_path, images_folder, output_folder)
+    
+    evaluator = LicensePlateEvaluator(localization_csv_path, classifier_csv_path, data_loader)
+    results = evaluator.evaluate_predictions()
+    print(results)
+    
 if __name__ == "__main__":
     main()
     
