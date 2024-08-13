@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import Dataset
 
 class LicensePlateDataset(Dataset):
-    def __init__(self, root, transforms=None):
+    def __init__(self, root, transforms=None, label=False):
         """
         Initializes the dataset.
         Args:
@@ -15,6 +15,7 @@ class LicensePlateDataset(Dataset):
         self.root = root
         self.transforms = transforms
         self.imgs = list(sorted([file for file in os.listdir(root) if file.endswith('.jpg')]))
+        self.label = label
 
     def __getitem__(self, idx):
         """
@@ -27,18 +28,21 @@ class LicensePlateDataset(Dataset):
         """
         img_path = os.path.join(self.root, self.imgs[idx])
         img = Image.open(img_path).convert('RGB')
-
+        if self.transforms:
+            img = self.transforms(img)
+        
         # Extract the image file name without the path
         image_filename = os.path.basename(img_path)
 
-        ann_path = img_path.replace('.jpg', '.xml')
-        boxes, labels = self.parse_annotations(ann_path)
+        if self.label == True:
+            ann_path = img_path.replace('.jpg', '.xml')
+            boxes, labels = self.parse_annotations(ann_path)
 
-        if self.transforms:
-            img = self.transforms(img)
+            # Include the image filename in the return tuple
+            return img, boxes, labels, image_filename
 
-        # Include the image filename in the return tuple
-        return img, boxes, labels, image_filename
+        else:
+            return img, [], [], image_filename
 
 
 
